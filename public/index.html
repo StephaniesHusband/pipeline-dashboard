@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CI/CD Multi-App Monitor</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    :root { --bg: #0b1120; --card: #1e293b; --card-hover: #24344d; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --primary: #38bdf8; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --udeploy: #818cf8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .controls { display: flex; align-items: center; gap: 10px; }
+    button { background: #0f172a; color: #fff; border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+    button:hover { border-color: var(--primary); }
+    button.primary { background: #0284c7; border-color: #38bdf8; }
+    button.notify-on { background: rgba(34,197,94,0.2); border-color: var(--success); color: #86efac; }
+    .section-title { font-size: 1.15rem; font-weight: 700; color: #fff; margin: 20px 0 12px; display: flex; align-items: center; gap: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; margin-bottom: 24px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
+    .card:hover { background: var(--card-hover); border-color: #475569; }
+    .card.building { border-color: var(--primary); box-shadow: 0 0 12px rgba(56,189,248,0.25); }
+    .card.error { border-color: var(--danger); }
+    .card-udeploy { border-left: 4px solid var(--udeploy); }
+    .card-jenkins { border-left: 4px solid var(--primary); }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px; }
+    .app-title { font-size: 1.05rem; font-weight: 700; color: #fff; }
+    .app-sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .badge { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-running { background: rgba(56,189,248,0.25); color: var(--primary); animation: pulse 2s infinite; }
+    .badge-success { background: rgba(34,197,94,0.25); color: var(--success); }
+    .badge-failed { background: rgba(239,68,68,0.25); color: var(--danger); }
+    .badge-idle { background: rgba(148,163,184,0.2); color: var(--muted); }
+    .badge-deploying { background: rgba(129,140,248,0.25); color: var(--udeploy); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    .glance-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 0.9rem; }
+    .glance-label { color: var(--muted); font-size: 0.82rem; }
+    .glance-value { font-weight: 600; }
+    .env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .env-box { background: #0f172a; border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+    .env-box.active { border-color: var(--udeploy); background: rgba(129,140,248,0.12); }
+    .env-box.deployed { border-color: var(--success); background: rgba(34,197,94,0.12); }
+    .env-name { font-weight: 700; font-size: 0.95rem; }
+    .env-status { font-size: 0.78rem; margin-top: 4px; color: var(--muted); font-weight: 600; }
+    .level-tag { background: #0f172a; border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+    .level-tag.active { border-color: var(--primary); color: var(--primary); background: rgba(56,189,248,0.15); }
+    .expand-toggle { text-align: center; font-size: 0.78rem; color: var(--muted); margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
+    .details-drawer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.85rem; cursor: default; }
+    .detail-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); word-break: break-all; }
+    .err-box { margin-top: 10px; padding: 10px; background: rgba(239,68,68,0.1); border: 1px solid var(--danger); border-radius: 6px; font-size: 0.8rem; color: #fca5a5; }
+    .drawer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .filter-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+    .filter-btn { background: var(--card); border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; cursor: pointer; }
+    .filter-btn.active { color: #fff; border-color: var(--primary); background: rgba(56,189,248,0.15); font-weight: bold; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 90%; max-width: 520px; }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    .modal-field input, .modal-field textarea { width: 100%; background: #0f172a; color: #fff; border: 1px solid var(--border); padding: 8px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; }
+    .tab-group { display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .tab-btn { background: transparent; border: none; padding: 6px 10px; cursor: pointer; color: var(--muted); }
+    .tab-btn.active { color: var(--primary); font-weight: bold; border-bottom: 2px solid var(--primary); }
+    .footer { text-align: center; font-size: 0.8rem; color: var(--muted); margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <header>
+      <div>
+        <h2>CI/CD Pipeline &amp; Deployment Monitor</h2>
+        <span style="font-size:0.85rem; color:var(--muted)">Jenkins Builds &amp; uDeploy Targets &bull; Focused on: <strong>L4</strong> &amp; <strong>LP</strong></span>
+      </div>
+      <div class="controls">
+        <button :class="{ 'notify-on': notificationsActive }" @click="toggleNotifications">
+          {{ notificationsActive ? "Notifications Active" : "Enable Notifications" }}
+        </button>
+        <button @click="fetchAll">Refresh All</button>
+      </div>
+    </header>
+
+    <div class="filter-tabs">
+      <button class="filter-btn" :class="{ active: viewFilter === 'all' }" @click="viewFilter = 'all'">All Cards</button>
+      <button class="filter-btn" :class="{ active: viewFilter === 'jenkins' }" @click="viewFilter = 'jenkins'">Jenkins Builds Only</button>
+      <button class="filter-btn" :class="{ active: viewFilter === 'udeploy' }" @click="viewFilter = 'udeploy'">uDeploy L4/LP Only</button>
+    </div>
+
+    <!-- App Cards Grid -->
+    <div v-for="item in pipelines" :key="item.app.id" style="margin-bottom: 26px;">
+      <div class="section-title">
+        <span>{{ item.app.name }}</span>
+      </div>
+
+      <div class="grid">
+        <!-- 1. Jenkins Build Card -->
+        <div v-if="viewFilter === 'all' || viewFilter === 'jenkins'" :class="['card', 'card-jenkins', getCardClass(item)]" @click="toggleExpand(item.app.id + '-jenkins')">
+          <div class="card-header">
+            <div>
+              <div class="app-title">Jenkins Build</div>
+              <div class="app-sub">{{ item.app.jenkinsJob.split('/').pop() }}</div>
+            </div>
+            <span :class="['badge', getBadgeClass(item)]">{{ getBadgeText(item) }}</span>
+          </div>
+
+          <div v-if="item.success && item.isBuilding" class="glance-row">
+            <span class="glance-label">Building Now:</span>
+            <span class="glance-value" style="color:var(--primary)">#{{ item.buildNumber }}</span>
+          </div>
+
+          <div v-if="item.success && item.detectedTargetEnv" class="glance-row">
+            <span class="glance-label">Target Level:</span>
+            <span class="level-tag active">{{ item.detectedTargetEnv }}</span>
+          </div>
+
+          <div v-if="item.success && !item.isBuilding" class="glance-row">
+            <span class="glance-label">Last Successful:</span>
+            <span class="glance-value" style="color:var(--success)">{{ item.lastSuccessfulBuild ? ("#" + item.lastSuccessfulBuild) : "None" }}</span>
+          </div>
+
+          <div v-if="item.success" class="glance-row">
+            <span class="glance-label">Latest Build:</span>
+            <span>{{ item.buildNumber ? ("#" + item.buildNumber) : "None" }}</span>
+          </div>
+
+          <div v-if="!item.success" class="glance-row" style="color:var(--danger)">
+            <span class="glance-label" style="color:var(--danger)">Error:</span>
+            <span class="glance-value">{{ item.error }}</span>
+          </div>
+
+          <div class="expand-toggle">
+            {{ isExpanded(item.app.id + '-jenkins') ? "&uarr; Click to collapse" : "&darr; Click for job details &amp; auth" }}
+          </div>
+
+          <!-- Jenkins Drawer -->
+          <div v-if="isExpanded(item.app.id + '-jenkins')" class="details-drawer" @click.stop>
+            <div class="detail-row"><span style="color:var(--muted)">Full Job:</span><span>{{ item.app.jenkinsJob }}</span></div>
+            <div class="detail-row"><span style="color:var(--muted)">Host:</span><span style="font-size:0.8rem">{{ item.app.jenkinsBaseUrl || "Default" }}</span></div>
+            <div class="detail-row"><span style="color:var(--muted)">Auth Mode:</span><span>{{ item.authMode || "None" }}</span></div>
+            <div class="detail-row" v-if="item.buildUrl">
+              <span style="color:var(--muted)">Jenkins URL:</span>
+              <a :href="item.buildUrl" target="_blank" style="color:var(--primary);text-decoration:none">Open in Jenkins &rarr;</a>
+            </div>
+
+            <!-- NEW: Parameter Debugger -->
+            <div class="detail-row" v-if="item.allParams && item.allParams.length > 0" style="flex-direction:column; gap:6px;">
+              <span style="color:var(--muted)">Build Parameters:</span>
+              <div style="background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; font-family:monospace; font-size:0.75rem; white-space:pre-wrap; color:#cbd5e1;">{{ item.allParams.join("\n") }}</div>
+            </div>
+
+            <div v-if="!item.success" class="err-box">
+              <div><strong>Details:</strong> {{ item.error }}</div>
+              <div v-if="item.diagnosis" style="margin-top:4px;">{{ item.diagnosis }}</div>
+              <div style="margin-top:6px; font-size:0.75rem; color:var(--muted)">URL: {{ item.urlAttempted }}</div>
+            </div>
+
+            <div class="drawer-actions">
+              <button class="primary" @click.stop="openAuthModal(item.app)">Configure Auth</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. uDeploy Status Card (L4 & LP) -->
+        <div v-if="viewFilter === 'all' || viewFilter === 'udeploy'" class="card card-udeploy" @click="toggleExpand(item.app.id + '-udeploy')">
+          <div class="card-header">
+            <div>
+              <div class="app-title">uDeploy Deployments</div>
+              <div class="app-sub">{{ item.app.udeployApp }} &bull; {{ item.app.udeployComponent }}</div>
+            </div>
+            <span :class="['badge', getUDeployBadgeClass(item)]">{{ getUDeployBadgeText(item) }}</span>
+          </div>
+
+          <!-- L4 & LP Side-by-Side Grid -->
+          <div class="env-grid">
+            <div :class="['env-box', getEnvBoxClass(item, 'L4')]">
+              <div class="env-name">L4 (Staging)</div>
+              <div class="env-status">{{ getEnvState(item, 'L4') }}</div>
+            </div>
+            <div :class="['env-box', getEnvBoxClass(item, 'LP')]">
+              <div class="env-name">LP (Production)</div>
+              <div class="env-status">{{ getEnvState(item, 'LP') }}</div>
+            </div>
+          </div>
+
+          <div class="expand-toggle">
+            {{ isExpanded(item.app.id + '-udeploy') ? "&uarr; Click to collapse" : "&darr; Click for uDeploy links" }}
+          </div>
+
+          <!-- uDeploy Drawer -->
+          <div v-if="isExpanded(item.app.id + '-udeploy')" class="details-drawer" @click.stop>
+            <div class="detail-row"><span style="color:var(--muted)">Application:</span><span>{{ item.app.udeployApp }}</span></div>
+            <div class="detail-row"><span style="color:var(--muted)">Component:</span><span>{{ item.app.udeployComponent }}</span></div>
+            <div class="detail-row"><span style="color:var(--muted)">Active Target:</span><span>{{ item.detectedTargetEnv || "None (Idle)" }}</span></div>
+            <div class="detail-row" v-if="item.udeployUrl">
+              <span style="color:var(--muted)">uDeploy Console:</span>
+              <a :href="item.udeployUrl" target="_blank" style="color:var(--udeploy);text-decoration:none">Open in uDeploy &rarr;</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Polled at: {{ polledAt || "Never" }} &bull; Auto-refreshes every 6 seconds</div>
+
+    <!-- App-Specific Auth Modal -->
+    <div v-if="showAuthModal" class="modal" @click.self="showAuthModal = false">
+      <div class="modal-content">
+        <h3 style="margin-bottom:6px;">Authentication: {{ activeApp ? activeApp.name : "" }}</h3>
+        <div style="font-size:0.8rem; color:var(--muted); margin-bottom:14px;">
+          Target Host: <code>{{ (activeApp && activeApp.jenkinsBaseUrl) ? activeApp.jenkinsBaseUrl : "Default Cluster" }}</code>
+        </div>
+
+        <div class="tab-group">
+          <button class="tab-btn" :class="{ active: authTab === 'session' }" @click="authTab = 'session'">Browser Session Cookie</button>
+          <button class="tab-btn" :class="{ active: authTab === 'token' }" @click="authTab = 'token'">User ID &amp; Token</button>
+        </div>
+
+        <div v-if="authTab === 'session'">
+          <div style="font-size:0.82rem; color:var(--muted); margin-bottom:8px;">
+            From DevTools (Network tab &rarr; Request Headers &rarr; Cookie), copy and paste the cookie string for this cluster:
+          </div>
+          <div class="modal-field">
+            <label>Cookie String</label>
+            <textarea rows="3" v-model="editCookie" placeholder="JSESSIONID.xxxx=nodexxxx; ..."></textarea>
+          </div>
+        </div>
+
+        <div v-if="authTab === 'token'">
+          <div class="modal-field">
+            <label>Jenkins User ID</label>
+            <input v-model="editUser" placeholder="263952" />
+          </div>
+          <div class="modal-field">
+            <label>Jenkins API Token</label>
+            <input v-model="editToken" type="password" placeholder="Paste API token" />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+          <button @click="showAuthModal = false">Cancel</button>
+          <button class="primary" @click="saveAuth">Save for this App</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    createApp({
+      setup() {
+        const pipelines = ref([]);
+        const expanded = ref({});
+        const polledAt = ref("");
+        const showAuthModal = ref(false);
+        const activeApp = ref(null);
+        const authTab = ref("session");
+        const viewFilter = ref("all");
+        const editUser = ref("263952");
+        const editToken = ref("");
+        const editCookie = ref("");
+        const notificationsActive = ref(false);
+        const previousStates = ref({});
+        let swRegistration = null;
+
+        const isExpanded = (id) => Boolean(expanded.value[id]);
+        const toggleExpand = (id) => { expanded.value[id] = !expanded.value[id]; };
+
+        const getBadgeText = (item) => {
+          if (!item.success) return "ERROR";
+          if (item.isBuilding) return "BUILDING";
+          if (item.inQueue) return "IN QUEUE";
+          return item.result || "IDLE";
+        };
+
+        const getBadgeClass = (item) => {
+          const txt = getBadgeText(item);
+          if (txt === "BUILDING" || txt === "IN QUEUE") return "badge-running";
+          if (txt === "SUCCESS") return "badge-success";
+          if (txt === "FAILURE" || txt === "ERROR") return "badge-failed";
+          return "badge-idle";
+        };
+
+        const getCardClass = (item) => {
+          if (!item.success) return "error";
+          if (item.isBuilding) return "building";
+          return "";
+        };
+
+        const getUDeployBadgeText = (item) => {
+          if (item.isBuilding && item.detectedTargetEnv) {
+            return item.detectedTargetEnv + " DEPLOYING";
+          }
+          if (item.detectedTargetEnv) {
+            return item.detectedTargetEnv + " TARGETED";
+          }
+          return "READY";
+        };
+
+        const getUDeployBadgeClass = (item) => {
+          if (item.isBuilding && item.detectedTargetEnv) return "badge-deploying";
+          return "badge-idle";
+        };
+
+        const getEnvBoxClass = (item, env) => {
+          if (item.detectedTargetEnv === env && item.isBuilding) return "active";
+          if (item.detectedTargetEnv === env && !item.isBuilding && item.result === "SUCCESS") return "deployed";
+          return "";
+        };
+
+        const getEnvState = (item, env) => {
+          if (item.detectedTargetEnv === env) {
+            if (item.isBuilding) return "Deploying...";
+            if (item.result === "SUCCESS") return "Deployed (Last)";
+            if (item.result === "FAILURE") return "Failed";
+          }
+          return "Idle";
+        };
+
+        const triggerNotification = (title, body, tag) => {
+          if (!notificationsActive.value || Notification.permission !== "granted") return;
+          if (swRegistration && swRegistration.showNotification) {
+            swRegistration.showNotification(title, {
+              body: body,
+              tag: tag || "pipeline-alert",
+              renotify: true
+            });
+          } else if ("Notification" in window) {
+            new Notification(title, { body: body, tag: tag });
+          }
+        };
+
+        const toggleNotifications = async () => {
+          if (!("Notification" in window)) {
+            alert("Desktop notifications are not supported in this browser.");
+            return;
+          }
+          if (Notification.permission === "granted") {
+            notificationsActive.value = !notificationsActive.value;
+            return;
+          }
+          const perm = await Notification.requestPermission();
+          if (perm === "granted") {
+            notificationsActive.value = true;
+            triggerNotification("Notifications Enabled", "You will be alerted when builds start, complete, or fail.", "init");
+          } else {
+            notificationsActive.value = false;
+          }
+        };
+
+        const initServiceWorker = async () => {
+          if ("serviceWorker" in navigator && "Notification" in window) {
+            try {
+              swRegistration = await navigator.serviceWorker.register("/sw.js");
+              if (Notification.permission === "granted") {
+                notificationsActive.value = true;
+              }
+            } catch (err) {
+              console.warn("Service Worker setup warning:", err);
+            }
+          }
+        };
+
+        const checkStateChanges = (newPipelines) => {
+          newPipelines.forEach(function(curr) {
+            const id = curr.app.id;
+            const prev = previousStates.value[id];
+
+            if (prev) {
+              // 1. Build started
+              if (!prev.isBuilding && curr.isBuilding) {
+                const target = curr.detectedTargetEnv ? (" targeting " + curr.detectedTargetEnv) : "";
+                triggerNotification(
+                  curr.app.name + ": Build Started",
+                  "Build #" + curr.buildNumber + target + " is now running in Jenkins.",
+                  id + "-started"
+                );
+              }
+              // 2. Build finished
+              else if (prev.isBuilding && !curr.isBuilding) {
+                const status = curr.result || "COMPLETED";
+                triggerNotification(
+                  curr.app.name + ": Build " + status,
+                  "Build #" + curr.buildNumber + " completed with result: " + status,
+                  id + "-finished"
+                );
+              }
+              // 3. Error state entered
+              else if (prev.success && !curr.success) {
+                triggerNotification(
+                  curr.app.name + ": Pipeline Error",
+                  curr.error || "Authentication or connection error detected.",
+                  id + "-error"
+                );
+              }
+              // 4. Target environment changed (L4 vs LP)
+              else if (prev.detectedTargetEnv !== curr.detectedTargetEnv && curr.detectedTargetEnv) {
+                triggerNotification(
+                  curr.app.name + ": uDeploy Target " + curr.detectedTargetEnv,
+                  "Deployment level switched to " + curr.detectedTargetEnv,
+                  id + "-target"
+                );
+              }
+            }
+
+            // Save snapshot for next polling round
+            previousStates.value[id] = {
+              isBuilding: Boolean(curr.isBuilding),
+              result: curr.result,
+              success: Boolean(curr.success),
+              buildNumber: curr.buildNumber,
+              detectedTargetEnv: curr.detectedTargetEnv
+            };
+          });
+        };
+
+        const fetchAll = async () => {
+          try {
+            const res = await fetch("/api/status-all");
+            const data = await res.json();
+            const list = data.pipelines || [];
+            checkStateChanges(list);
+            pipelines.value = list;
+            polledAt.value = data.polledAt || "";
+          } catch (e) {
+            console.error("Fetch all error:", e);
+          }
+        };
+
+        const openAuthModal = async (app) => {
+          activeApp.value = app;
+          editToken.value = "";
+          try {
+            const res = await fetch("/api/app-auth?appId=" + encodeURIComponent(app.id));
+            const data = await res.json();
+            editCookie.value = data.cookie || "";
+            editUser.value = data.user || "263952";
+          } catch (e) {
+            editCookie.value = "";
+          }
+          showAuthModal.value = true;
+        };
+
+        const saveAuth = async () => {
+          if (!activeApp.value) return;
+          try {
+            const payload = { appId: activeApp.value.id };
+            if (authTab.value === "session") {
+              payload.cookie = editCookie.value;
+            } else {
+              payload.user = editUser.value;
+              payload.token = editToken.value;
+            }
+            await fetch("/api/save-auth", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+            showAuthModal.value = false;
+            await fetchAll();
+          } catch (e) {
+            alert("Failed to save auth: " + e.message);
+          }
+        };
+
+        onMounted(() => {
+          initServiceWorker();
+          fetchAll();
+          setInterval(fetchAll, 6000);
+        });
+
+        return {
+          pipelines, polledAt, showAuthModal, activeApp, authTab, viewFilter, editUser, editToken, editCookie,
+          notificationsActive, isExpanded, toggleExpand, getBadgeText, getBadgeClass, getCardClass,
+          getUDeployBadgeText, getUDeployBadgeClass, getEnvBoxClass, getEnvState, fetchAll, openAuthModal, saveAuth,
+          toggleNotifications
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

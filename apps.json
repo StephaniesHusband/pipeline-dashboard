@@ -1,0 +1,36 @@
+[
+  {
+    "id": "senseaware-redesign",
+    "name": "SenseAware - Redesign UI",
+    "jenkinsJob": "SenseAware-4057/CloudOps/deploy/deployRedesignUI",
+    "udeployApp": "SENSEAWARE",
+    "udeployComponent": "SENSEAWARE_CORP_WWW",
+    "environments": [
+      "L4",
+      "LP"
+    ]
+  },
+  {
+     "id": "sav-portal",
+     "name": "SAV Portal",
+     "jenkinsBaseUrl": "https://jenkins.prod.cloud.fedex.com:8443/jenkins",
+     "jenkinsJob": "OTI/Tron-Central-7120/PaaS/Deploy_to_L1/iot-customer-portal",
+     "udeployApp": "TRON_CENTRAL",
+     "udeployComponent": "TRON_CENTRAL_INTERNAL_WWW",
+     "environments": [
+        "L4",
+        "LP"
+     ]
+  },
+  {
+     "id": "qr-code",
+     "name": "M4 Landing Page",
+     "jenkinsJob": "SenseAware-4057/PaaS/Deploy_to_L1/qrcode",
+     "udeployApp": "SENSEAWARE",
+     "udeployComponent": "SENSEAWARE_CORP_WWW",
+     "environments": [
+        "L4",
+        "LP"
+     ]
+  }
+]
